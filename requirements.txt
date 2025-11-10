@@ -1,0 +1,18 @@
+# --- Core Libraries ---
+pandas
+requests
+numpy
+
+# --- Selenium + Chrome ---
+selenium>=4.15.0
+undetected-chromedriver>=3.5.5
+webdriver-manager
+
+# --- Flask stack (for app.py integration) ---
+Flask
+Flask-Bcrypt
+Flask-Login
+geopy
+
+# --- Scheduling (optional for automation) ---
+schedule
