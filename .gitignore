@@ -1,0 +1,51 @@
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+*.egg
+*.log
+
+# ---- Virtual Environment ----
+venv/
+venv310/
+.env/
+.envrc
+
+# ---- OS-generated files ----
+.DS_Store
+Thumbs.db
+
+# ---- Streamlit ----
+.streamlit/secrets.toml
+.streamlit/credentials.toml
+
+# ---- Data & DB ----
+# Keep the DB, ignore backups or large dumps
+data/*.db-journal
+data/*.sqlite-journal
+data/temp/
+# Ignore ALL CSV files EXCEPT the one we want to track
+data/*.csv
+!data/all_jobs.csv   # <-- keep this file in git
+
+# ---- Browser Drivers (Selenium/Playwright) ----
+ms-playwright/
+playwright/
+.chromium/
+firefox/
+webkit/
+
+# ---- Cache ----
+.cache/
+*.cache
+
+# ---- Node/JS dependencies (if any future work) ----
+node_modules/
+
+# ---- Misc ----
+output/
+backup/
+tmp/
