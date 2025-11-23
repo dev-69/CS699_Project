@@ -90,7 +90,6 @@ with st.sidebar:
     use_linkedin = st.checkbox("LinkedIn", value=True)
     use_indeed = st.checkbox("Indeed", value=True)
     use_naukri = st.checkbox("Naukri", value=True)
-    use_history = st.checkbox("Include historical data", value=True)
     
     scrape_btn = st.button("Start Scraping", type="primary")
 
@@ -167,25 +166,33 @@ if scrape_btn:
         with st.spinner(f"Searching..."):
 
             df, counts = asyncio.run(run_hybrid_scrape(keyword, location, limit, time_filter, work_type, exp_level))
-            if use_history:
-                df_hist = load_all_jobs()
-                if not df_hist.empty:
-                    df = pd.concat([df, df_hist], ignore_index=True)
-                    df.drop_duplicates(subset=["Title", "Company"], inplace=True)
         
         if df.empty:
             st.error("No jobs found. The scrapers might be blocked by the websites.")
         else:
+            expected_cols = ["title", "company", "location", "salary", "experience", "description", "date_posted", "site"]
+            for col in expected_cols:
+                if col not in df.columns:
+                    df[col] = "Not Disclosed"
 
-            cols = ["title", "company", "location", "salary", "experience", "description", "date_posted", "site"]
-            for col in cols:
-                if col not in df.columns: df[col] = "Not Disclosed"
 
             df = df.rename(columns={
-                "title": "Title", "company": "Company", "location": "Location", 
-                "site": "Platform", "salary": "Salary", "experience": "Experience", 
+                "title": "Title",
+                "company": "Company",
+                "location": "Location",
+                "site": "Platform",
+                "salary": "Salary",
+                "experience": "Experience",
                 "date_posted": "Date Posted"
             })
+
+            if "Title" in df.columns and "Company" in df.columns:
+                df.drop_duplicates(subset=["Title", "Company"], inplace=True)
+                
+            else:
+                st.warning("Some expected columns are missing; duplicate removal skipped.")
+
+
             
             st.success(f"Analyzed {len(df)} jobs.")
             
