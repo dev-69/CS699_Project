@@ -1,8 +1,9 @@
 import sqlite3
 import os
 import pandas as pd
+import os
 
-DB_PATH = "jobs.db"
+DB_PATH = os.path.join("data", "jobs.db")
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -47,7 +48,7 @@ def insert_job(conn, job):
         pass 
 
 def export_to_csv(output_path="output/all_jobs.csv"):
-    os.makedirs("output", exist_ok=True)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     try:
         df = pd.read_sql_query("SELECT * FROM jobs", conn)
@@ -55,3 +56,9 @@ def export_to_csv(output_path="output/all_jobs.csv"):
         return df
     finally:
         conn.close()
+
+def load_all_jobs():
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql_query("SELECT * FROM jobs", conn)
+    conn.close()
+    return df

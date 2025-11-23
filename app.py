@@ -9,10 +9,10 @@ st.set_page_config(page_title="Job Market Intelligence", page_icon="🕵️", la
 nest_asyncio.apply()
 warnings.filterwarnings("ignore")
 
-from database import init_db, insert_job
-from scraper import SeleniumScraper, LinkedInScraper
-from analytics_engine import extract_skills, clean_location
-from recommender import get_recommendations
+from src.database import init_db, insert_job, load_all_jobs
+from src.scraper import SeleniumScraper, LinkedInScraper
+from src.analytics_engine import extract_skills, clean_location
+from src.recommender import get_recommendations
 
 
 st.markdown("""
@@ -90,6 +90,7 @@ with st.sidebar:
     use_linkedin = st.checkbox("LinkedIn", value=True)
     use_indeed = st.checkbox("Indeed", value=True)
     use_naukri = st.checkbox("Naukri", value=True)
+    use_history = st.checkbox("Include historical data", value=True)
     
     scrape_btn = st.button("Start Scraping", type="primary")
 
@@ -129,7 +130,7 @@ async def run_hybrid_scrape(keyword, location, limit, time_filter, work_type, ex
                 jobs.extend(res)
                 counts["Indeed"] = len(res)
                 for j in res: insert_job(conn, j)
-            except Exception as e: st.error(f"Indeed Error: {e}")
+            except Exception as e: print("[Scraper Error]", e)
             progress_bar.progress(33)
 
         if use_naukri:
@@ -139,7 +140,7 @@ async def run_hybrid_scrape(keyword, location, limit, time_filter, work_type, ex
                 jobs.extend(res)
                 counts["Naukri"] = len(res)
                 for j in res: insert_job(conn, j)
-            except Exception as e: st.error(f"Naukri Error: {e}")
+            except Exception as e: print("[Scraper Error]", e)
             progress_bar.progress(66)
 
     if use_linkedin:
@@ -150,7 +151,7 @@ async def run_hybrid_scrape(keyword, location, limit, time_filter, work_type, ex
             jobs.extend(res)
             counts["LinkedIn"] = len(res)
             for j in res: insert_job(conn, j)
-        except Exception as e: st.error(f"LinkedIn Error: {e}")
+        except Exception as e: print("[Scraper Error]", e)
         progress_bar.progress(90)
 
     conn.close()
@@ -166,6 +167,11 @@ if scrape_btn:
         with st.spinner(f"Searching..."):
 
             df, counts = asyncio.run(run_hybrid_scrape(keyword, location, limit, time_filter, work_type, exp_level))
+            if use_history:
+                df_hist = load_all_jobs()
+                if not df_hist.empty:
+                    df = pd.concat([df, df_hist], ignore_index=True)
+                    df.drop_duplicates(subset=["Title", "Company"], inplace=True)
         
         if df.empty:
             st.error("No jobs found. The scrapers might be blocked by the websites.")
@@ -249,3 +255,32 @@ if scrape_btn:
 
 else:
     st.info("Select filters in the sidebar and click 'Start Scraping'")
+    st.subheader("Historical Market Insights")
+    df_hist = load_all_jobs()
+
+    if df_hist.empty:
+        st.warning("No historical data available. Scrape jobs to begin.")
+
+    else:
+        df_hist = df_hist.rename(columns={
+            "title": "Title", "company": "Company", "location": "Location", 
+            "site": "Platform", "salary": "Salary", "experience": "Experience", 
+            "date_posted": "Date Posted"
+        })
+
+        st.subheader("Top Skills from Historical Data")
+        skills_df = extract_skills(df_hist)
+
+        if not skills_df.empty:
+            fig = px.bar(skills_df, x="Skill", y="Count", title="Top Skills (Historical)")
+            st.plotly_chart(fig, use_container_width=True)
+
+
+        st.subheader("Job Distribution by Location")
+        df_hist['Clean_Loc'] = df_hist['Location'].apply(clean_location)
+        fig_loc = px.pie(df_hist, names='Clean_Loc', title="Locations (Historical)")
+        st.plotly_chart(fig_loc, use_container_width=True)
+
+        st.subheader("Jobs per Platform")
+        fig_plat = px.histogram(df_hist, x="Platform", title="Jobs by Platform (Historical)")
+        st.plotly_chart(fig_plat, use_container_width=True)
