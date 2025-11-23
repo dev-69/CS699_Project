@@ -1,293 +1,355 @@
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-import asyncio
 import nest_asyncio
 import warnings
+import streamlit as st
+import plotly.express as px
+import pandas as pd
+import asyncio
 
-st.set_page_config(page_title="Job Market Intelligence", page_icon="🕵️", layout="wide")
+st.set_page_config(page_title="Job Market Intelligence", page_icon="", layout="wide")
 nest_asyncio.apply()
 warnings.filterwarnings("ignore")
 
-from src.database import init_db, insert_job, load_all_jobs
+px.defaults.template = "plotly_dark"
+px.defaults.color_discrete_sequence = px.colors.qualitative.Set2
+
+from src.database import init_db, insert_job, load_all_jobs, save_to_csv, load_all_jobs_csv
 from src.scraper import SeleniumScraper, LinkedInScraper
 from src.analytics_engine import extract_skills, clean_location
 from src.recommender import get_recommendations
 
-
 st.markdown("""
 <style>
     .stApp { background-color: #0E1117; color: #FAFAFA; }
-    
+    .main-title { font-size: 2.4rem; font-weight: 800; color: #F9FAFB; margin-bottom: 0.2rem; }
+    .subtitle { font-size: 0.95rem; color: #9CA3AF; margin-bottom: 1.5rem; }
+
     .resource-card {
-        background-color: #262730;
-        border-radius: 10px;
+        background: radial-gradient(circle at top left, #1F2933, #020617);
+        border-radius: 14px;
         padding: 15px;
         margin-bottom: 20px;
         height: 300px;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        border: 1px solid #333;
+        border: 1px solid #111827;
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+        transition: transform 0.15s ease, box-shadow 0.15s ease, border 0.15s ease;
     }
-    .resource-card:hover { border: 1px solid #FF4B4B; }
+    .resource-card:hover {
+        transform: translateY(-4px);
+        border: 1px solid #F97316;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    }
     .card-img {
         width: 100%;
         height: 140px;
         object-fit: cover;
-        border-radius: 5px;
+        border-radius: 10px;
         margin-bottom: 10px;
     }
     .card-title {
-        font-weight: bold;
+        font-weight: 600;
         font-size: 14px;
-        color: #FFF;
+        color: #F9FAFB;
         margin-bottom: 5px;
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
         overflow: hidden;
     }
+    .card-desc {
+        font-size: 12px;
+        color: #9CA3AF;
+        height: 50px;
+        overflow: hidden;
+    }
     .card-tag {
         font-size: 11px;
-        color: #AAA;
-        background-color: #1E1E1E;
-        padding: 2px 8px;
-        border-radius: 4px;
+        color: #D1D5DB;
+        background: linear-gradient(to right, #111827, #1F2937);
+        padding: 3px 10px;
+        border-radius: 999px;
+        border: 1px solid #374151;
         width: fit-content;
     }
     .card-btn {
         display: block;
         width: 100%;
         text-align: center;
-        background-color: #FF4B4B;
+        background: linear-gradient(90deg, #F97316, #EC4899);
         color: white !important;
         padding: 8px;
-        border-radius: 5px;
+        border-radius: 999px;
         text-decoration: none;
-        font-weight: bold;
+        font-weight: 700;
+        font-size: 13px;
+        letter-spacing: 0.03em;
     }
-    .card-btn:hover { background-color: #FF2B2B; }
+    .card-btn:hover {
+        background: linear-gradient(90deg, #FB923C, #F472B6);
+    }
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #020617, #111827);
+        border-right: 1px solid #1F2933;
+    }
+    .metric-label { font-size: 0.8rem; color: #9CA3AF; }
+    .metric-value { font-size: 1.5rem; font-weight: 700; color: #F9FAFB; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Unified Job Market Intelligence")
+st.markdown('<div class="main-title">Unified Job Market Intelligence</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Track roles across platforms and analyze real hiring trends.</div>', unsafe_allow_html=True)
 
 with st.sidebar:
-    st.header("Scraper Settings")
-    keyword = st.text_input("Job Role", "Data Scientist")
-    location = st.text_input("Location", "India")
-    
-    st.divider()
-    st.subheader("Filters")
-    time_filter = st.selectbox("Date Posted", ["Any Time", "Past 24 Hours", "Past Week", "Past Month"], index=1)
-    work_type = st.selectbox("Work Type", ["Any", "On-site", "Hybrid", "Remote"])
-    exp_level = st.selectbox("Experience Level", ["Any", "Internship", "Entry Level", "Associate", "Mid-Senior"])
-    
-    st.divider()
-    limit = st.slider("Jobs per Site", 5, 100, 20)
-    st.caption("Select Sources:")
-    use_linkedin = st.checkbox("LinkedIn", value=True)
-    use_indeed = st.checkbox("Indeed", value=True)
-    use_naukri = st.checkbox("Naukri", value=True)
-    
+    keyword = st.text_input("Keyword")
+    location = st.text_input("Location")
+    limit = st.number_input("Limit", min_value=10, max_value=1000, step=10)
+    time_filter = st.selectbox("Date Posted", ["1", "3", "7", "15", "30"])
+    work_type = st.selectbox("Work Type", ["All", "Remote", "Hybrid", "Onsite"])
+    exp_level = st.selectbox("Experience", ["All", "Entry", "Mid", "Senior"])
+    use_linkedin = st.checkbox("LinkedIn", True)
+    use_indeed = st.checkbox("Indeed", True)
+    use_naukri = st.checkbox("Naukri", True)
     scrape_btn = st.button("Start Scraping", type="primary")
 
 
 def render_resource_card(item, type_label):
-    img_url = item.get('thumbnail')
+    img_url = item.get("thumbnail")
+    title = item.get("title")
+    desc = item.get("description")
+    link = item.get("link")
 
-    if not img_url or "http" not in img_url:
-        img_url = "https://images.unsplash.com/photo-1501504905252-473c47e087f8?w=500&auto=format&fit=crop&q=60"
-    
     return f"""
     <div class="resource-card">
-        <div>
-            <img src="{img_url}" class="card-img" onerror="this.src='https://images.unsplash.com/photo-1501504905252-473c47e087f8?w=500&auto=format&fit=crop&q=60'">
-            <div class="card-title">{item['title']}</div>
-            <div class="card-tag">{type_label}</div>
-        </div>
-        <a href="{item['link']}" target="_blank" class="card-btn">Open Resource ➜</a>
+        <img src="{img_url}" class="card-img"/>
+        <div class="card-title">{title}</div>
+        <div class="card-desc">{desc}</div>
+        <div class="card-tag">{type_label}</div>
+        <a href="{link}" target="_blank" class="card-btn">Open</a>
     </div>
     """
 
+
 async def run_hybrid_scrape(keyword, location, limit, time_filter, work_type, exp_level):
     jobs = []
-    status_text = st.empty()
-    progress_bar = st.progress(0)
+    status = st.empty()
+    progress = st.progress(0)
+    counts = {"LinkedIn": 0, "Indeed": 0, "Naukri": 0}
     conn = init_db()
-    
-    counts = {"Indeed": 0, "Naukri": 0, "LinkedIn": 0}
-    
-    if use_indeed or use_naukri:
-        sel_scraper = SeleniumScraper()
-        
-        if use_indeed:
-            status_text.text("Running Indeed Scraper...")
-            try:
-                res = sel_scraper.scrape_indeed(keyword, limit, time_filter) 
-                jobs.extend(res)
-                counts["Indeed"] = len(res)
-                for j in res: insert_job(conn, j)
-            except Exception as e: print("[Scraper Error]", e)
-            progress_bar.progress(33)
+    sel = SeleniumScraper()
 
-        if use_naukri:
-            status_text.text("Running Naukri Scraper...")
-            try:
-                res = sel_scraper.scrape_naukri(keyword, location, limit)
-                jobs.extend(res)
-                counts["Naukri"] = len(res)
-                for j in res: insert_job(conn, j)
-            except Exception as e: print("[Scraper Error]", e)
-            progress_bar.progress(66)
+    if use_indeed:
+        status.text("Running Indeed Scraper")
+        try:
+            res = sel.scrape_indeed(keyword, limit, time_filter)
+            jobs.extend(res)
+            counts["Indeed"] = len(res)
+            for j in res:
+                insert_job(conn, j)
+                save_to_csv(j)
+        except:
+            pass
+        progress.progress(33)
+
+    if use_naukri:
+        status.text("Running Naukri Scraper")
+        try:
+            res = sel.scrape_naukri(keyword, location, limit)
+            jobs.extend(res)
+            counts["Naukri"] = len(res)
+            for j in res:
+                insert_job(conn, j)
+                save_to_csv(j)
+        except:
+            pass
+        progress.progress(66)
 
     if use_linkedin:
-        status_text.text("Running LinkedIn Scraper...")
-        lnk_scraper = LinkedInScraper()
+        status.text("Running LinkedIn Scraper")
+        ln = LinkedInScraper()
         try:
-            res = await lnk_scraper.scrape(keyword, location, limit, time_filter, work_type, exp_level)
+            res = await ln.scrape(keyword, location, limit, time_filter, work_type, exp_level)
             jobs.extend(res)
             counts["LinkedIn"] = len(res)
-            for j in res: insert_job(conn, j)
-        except Exception as e: print("[Scraper Error]", e)
-        progress_bar.progress(90)
+            for j in res:
+                insert_job(conn, j)
+                save_to_csv(j)
+        except:
+            pass
+        progress.progress(90)
 
     conn.close()
-    progress_bar.progress(100)
-    status_text.empty()
-    
+    progress.progress(100)
+
     return pd.DataFrame(jobs), counts
+
 
 if scrape_btn:
     if not (use_linkedin or use_indeed or use_naukri):
-        st.error("Please select at least one website.")
+        st.error("Select at least one website.")
     else:
-        with st.spinner(f"Searching..."):
+        with st.spinner("Searching..."):
+            df, counts = asyncio.run(
+                run_hybrid_scrape(keyword, location, limit, time_filter, work_type, exp_level)
+            )
 
-            df, counts = asyncio.run(run_hybrid_scrape(keyword, location, limit, time_filter, work_type, exp_level))
-        
         if df.empty:
-            st.error("No jobs found. The scrapers might be blocked by the websites.")
+            st.error("No jobs found.")
         else:
             expected_cols = ["title", "company", "location", "salary", "experience", "description", "date_posted", "site"]
             for col in expected_cols:
                 if col not in df.columns:
                     df[col] = "Not Disclosed"
 
-
             df = df.rename(columns={
-                "title": "Title",
-                "company": "Company",
-                "location": "Location",
-                "site": "Platform",
-                "salary": "Salary",
-                "experience": "Experience",
+                "title": "Title", "company": "Company", "location": "Location",
+                "site": "Platform", "salary": "Salary", "experience": "Experience",
                 "date_posted": "Date Posted"
             })
 
             if "Title" in df.columns and "Company" in df.columns:
                 df.drop_duplicates(subset=["Title", "Company"], inplace=True)
-                
-            else:
-                st.warning("Some expected columns are missing; duplicate removal skipped.")
 
-
-            
             st.success(f"Analyzed {len(df)} jobs.")
-            
-            b1, b2, b3 = st.columns(3)
-            b1.metric("LinkedIn", counts["LinkedIn"])
-            b2.metric("Indeed", counts["Indeed"])
-            b3.metric("Naukri", counts["Naukri"])
-            
+
+            m1, m2, m3 = st.columns(3)
+            m1.markdown(f"<div class='metric-label'>Unique Companies</div><div class='metric-value'>{df['Company'].nunique()}</div>", unsafe_allow_html=True)
+            m2.markdown(f"<div class='metric-label'>Distinct Locations</div><div class='metric-value'>{df['Location'].nunique()}</div>", unsafe_allow_html=True)
+            m3.markdown(f"<div class='metric-label'>Active Platforms</div><div class='metric-value'>{sum(v>0 for v in counts.values())}</div>", unsafe_allow_html=True)
+
+            p1, p2, p3 = st.columns(3)
+            p1.metric("LinkedIn Jobs", counts["LinkedIn"])
+            p2.metric("Indeed Jobs", counts["Indeed"])
+            p3.metric("Naukri Jobs", counts["Naukri"])
+
             tab1, tab2, tab3 = st.tabs(["Market Data", "Raw Data", "Learning Path"])
-            
-            
+
             with tab1:
                 c1, c2 = st.columns(2)
+
                 with c1:
                     st.subheader("Top Skills")
                     skills_df = extract_skills(df)
                     if not skills_df.empty:
-                        fig = px.scatter(skills_df, x='Skill', y='Count', size='Count', color='Skill', size_max=50)
+                        fig = px.scatter(skills_df, x="Skill", y="Count", size="Count", color="Skill", size_max=50)
                         st.plotly_chart(fig, use_container_width=True)
-                    else: st.info("No skills extracted.")
-                with c2:
-                    st.subheader("Locations")
-                    df['Clean_Loc'] = df['Location'].apply(clean_location)
-                    fig_loc = px.pie(df, names='Clean_Loc', hole=0.4)
-                    st.plotly_chart(fig_loc, use_container_width=True)
+                    else:
+                        st.info("No skills extracted.")
 
+                with c2:
+                    st.subheader("Location Spread")
+                    df["Clean_Loc"] = df["Location"].apply(clean_location)
+                    fig_loc = px.pie(df, names="Clean_Loc", hole=0.4)
+                    st.plotly_chart(fig_loc, use_container_width=True)
 
             with tab2:
                 st.subheader("Scraped Job Listings")
                 st.dataframe(df, use_container_width=True, height=600)
 
             with tab3:
-                st.subheader("Curated Learning Path")
-                
+                st.subheader("Learning Path")
+
                 if not skills_df.empty:
-                    top_skill = skills_df.iloc[0]['Skill']
+                    top_skill = skills_df.iloc[0]["Skill"]
                     topic = f"{top_skill} course"
-                    st.info(f"Focus Skill: **{top_skill}** (Most demanded in this search)")
+                    st.info(f"Focus Skill: {top_skill}")
                 else:
                     topic = f"{keyword} tutorial"
-                
-                with st.spinner("Fetching best courses..."):
+
+                with st.spinner("Fetching learning resources..."):
                     resources = get_recommendations(topic)
 
                 c1, c2, c3 = st.columns(3)
-                
+
                 with c1:
-                    st.markdown("#### Free (YouTube)")
+                    st.markdown("Free")
                     if resources.get("free"):
                         for rec in resources["free"][:3]:
                             st.markdown(render_resource_card(rec, "Video"), unsafe_allow_html=True)
-                    else: st.warning("No videos found.")
+                    else:
+                        st.warning("No videos found.")
 
                 with c2:
-                    st.markdown("#### University")
+                    st.markdown("University")
                     if resources.get("university"):
                         for rec in resources["university"][:3]:
                             st.markdown(render_resource_card(rec, "Lecture"), unsafe_allow_html=True)
-                    else: st.info("No university lectures found.")
+                    else:
+                        st.info("No university lectures found.")
 
                 with c3:
-                    st.markdown("#### Certificates")
+                    st.markdown("Certificates")
                     if resources.get("paid"):
                         for rec in resources["paid"][:3]:
                             st.markdown(render_resource_card(rec, "Certificate"), unsafe_allow_html=True)
-                    else: st.info("No paid courses found.")
+                    else:
+                        st.info("No paid courses found.")
 
 else:
-    st.info("Select filters in the sidebar and click 'Start Scraping'")
+    st.markdown("<h4>Select filters and run a scrape, or explore historical trends below.</h4>", unsafe_allow_html=True)
+
     st.subheader("Historical Market Insights")
     df_hist = load_all_jobs()
 
     if df_hist.empty:
-        st.warning("No historical data available. Scrape jobs to begin.")
-
+        st.warning("No historical data available.")
     else:
+        expected_hist = ["title", "company", "location", "salary", "experience", "description", "date_posted", "site"]
+        for col in expected_hist:
+            if col not in df_hist.columns:
+                df_hist[col] = "Not Disclosed"
+
         df_hist = df_hist.rename(columns={
-            "title": "Title", "company": "Company", "location": "Location", 
-            "site": "Platform", "salary": "Salary", "experience": "Experience", 
+            "title": "Title", "company": "Company", "location": "Location",
+            "site": "Platform", "salary": "Salary", "experience": "Experience",
             "date_posted": "Date Posted"
         })
 
-        st.subheader("Top Skills from Historical Data")
-        skills_df = extract_skills(df_hist)
+        df_hist.drop_duplicates(subset=["Title", "Company"], inplace=True)
 
+        st.success(f"Loaded {len(df_hist)} historical job entries.")
+
+        h1, h2, h3 = st.columns(3)
+        h1.markdown(f"<div class='metric-label'>Unique Companies</div><div class='metric-value'>{df_hist['Company'].nunique()}</div>", unsafe_allow_html=True)
+        h2.markdown(f"<div class='metric-label'>Distinct Locations</div><div class='metric-value'>{df_hist['Location'].nunique()}</div>", unsafe_allow_html=True)
+        h3.markdown(f"<div class='metric-label'>Platforms Used</div><div class='metric-value'>{df_hist['Platform'].nunique()}</div>", unsafe_allow_html=True)
+
+        st.subheader("Top Skills (Historical)")
+        skills_df = extract_skills(df_hist)
         if not skills_df.empty:
-            fig = px.bar(skills_df, x="Skill", y="Count", title="Top Skills (Historical)")
+            fig = px.bar(skills_df, x="Skill", y="Count")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No skill data found.")
+
+        c1, c2 = st.columns(2)
+
+        with c1:
+            st.subheader("Top Hiring Companies")
+            comp_counts = df_hist["Company"].value_counts().head(15)
+            fig = px.bar(comp_counts, orientation="h")
             st.plotly_chart(fig, use_container_width=True)
 
+        with c2:
+            st.subheader("Experience Requirements")
+            exp_counts = df_hist["Experience"].value_counts().head(10)
+            fig = px.bar(exp_counts)
+            st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader("Job Distribution by Location")
-        df_hist['Clean_Loc'] = df_hist['Location'].apply(clean_location)
-        fig_loc = px.pie(df_hist, names='Clean_Loc', title="Locations (Historical)")
-        st.plotly_chart(fig_loc, use_container_width=True)
+        c3, c4 = st.columns(2)
 
-        st.subheader("Jobs per Platform")
-        fig_plat = px.histogram(df_hist, x="Platform", title="Jobs by Platform (Historical)")
-        st.plotly_chart(fig_plat, use_container_width=True)
+        with c3:
+            st.subheader("Top Locations")
+            df_hist["Clean_Loc"] = df_hist["Location"].apply(clean_location)
+            loc_counts = df_hist["Clean_Loc"].value_counts().head(15)
+            fig = px.bar(loc_counts, orientation="h")
+            st.plotly_chart(fig, use_container_width=True)
+
+        with c4:
+            st.subheader("Jobs by Platform")
+            fig = px.pie(df_hist, names="Platform")
+            st.plotly_chart(fig, use_container_width=True)
+
+        with st.expander("Raw Historical Data"):
+            st.dataframe(df_hist, use_container_width=True, height=400)
