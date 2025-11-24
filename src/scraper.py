@@ -11,7 +11,8 @@ from bs4 import BeautifulSoup
 
 
 def parse_relative_date(text):
-    if not text: return datetime.now().strftime("%Y-%m-%d")
+    if not text:
+        return datetime.now().strftime("%Y-%m-%d")
     text = text.lower()
     today = datetime.now()
     
@@ -19,29 +20,56 @@ def parse_relative_date(text):
         return today.strftime("%Y-%m-%d")
     
     match = re.search(r'(\d+)', text)
-    if not match: return today.strftime("%Y-%m-%d")
+    if not match:
+        return today.strftime("%Y-%m-%d")
     num = int(match.group(1))
     
-    if "day" in text or "d" in text: date_obj = today - timedelta(days=num)
-    elif "week" in text or "w" in text: date_obj = today - timedelta(weeks=num)
-    elif "month" in text or "m" in text: date_obj = today - timedelta(days=num*30)
-    else: date_obj = today
+    if "day" in text or "d" in text:
+        date_obj = today - timedelta(days=num)
+    elif "week" in text or "w" in text:
+        date_obj = today - timedelta(weeks=num)
+    elif "month" in text or "m" in text:
+        date_obj = today - timedelta(days=num * 30)
+    else:
+        date_obj = today
     return date_obj.strftime("%Y-%m-%d")
 
 
 LINKEDIN_FILTERS = {
-    "time": {"Any Time": "", "Past 24 Hours": "&f_TPR=r86400", "Past Week": "&f_TPR=r604800", "Past Month": "&f_TPR=r2592000"},
-    "type": {"Any": "", "On-site": "&f_WT=1", "Remote": "&f_WT=2", "Hybrid": "&f_WT=3"},
-    "level": {"Any": "", "Internship": "&f_E=1", "Entry Level": "&f_E=2", "Associate": "&f_E=3", "Mid-Senior": "&f_E=4"}
+    "time": {
+        "Any Time": "",
+        "Past 24 Hours": "&f_TPR=r86400",
+        "Past Week": "&f_TPR=r604800",
+        "Past Month": "&f_TPR=r2592000"
+    },
+    "type": {
+        "Any": "",
+        "On-site": "&f_WT=1",
+        "Remote": "&f_WT=2",
+        "Hybrid": "&f_WT=3"
+    },
+    "level": {
+        "Any": "",
+        "Internship": "&f_E=1",
+        "Entry Level": "&f_E=2",
+        "Associate": "&f_E=3",
+        "Mid-Senior": "&f_E=4"
+    }
 }
-INDEED_FILTERS = {"Any Time": "", "Past 24 Hours": "&fromage=1", "Past Week": "&fromage=7", "Past Month": "&fromage=30"}
+
+INDEED_FILTERS = {
+    "Any Time": "",
+    "Past 24 Hours": "&fromage=1",
+    "Past Week": "&fromage=7",
+    "Past Month": "&fromage=30"
+}
 
 
 class SeleniumScraper:
     def get_driver(self, headless=False):
         options = uc.ChromeOptions()
-        
-        if headless: options.add_argument("--headless=new")
+        if headless:
+            options.add_argument("--headless=new")
         
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
@@ -50,11 +78,10 @@ class SeleniumScraper:
         
         browser_path = shutil.which("google-chrome") or shutil.which("google-chrome-stable") or shutil.which("chromium")
         if browser_path:
-             return uc.Chrome(options=options, browser_executable_path=browser_path, use_subprocess=True)
+            return uc.Chrome(options=options, browser_executable_path=browser_path, use_subprocess=True)
         return uc.Chrome(options=options, use_subprocess=True)
 
     def scrape_indeed(self, keyword, limit=10, time_filter="Any Time"):
-        print(f"[Indeed] Scraping '{keyword}'...")
         driver = self.get_driver(headless=False)
         jobs = []
         time_param = INDEED_FILTERS.get(time_filter, "")
@@ -70,12 +97,15 @@ class SeleniumScraper:
                     company = card.find_element(By.CSS_SELECTOR, "span[data-testid='company-name']").text
                     loc = card.find_element(By.CSS_SELECTOR, "div[data-testid='text-location']").text
                     
-                    try: date_text = card.find_element(By.CSS_SELECTOR, "span.date").text
-                    except: date_text = "Today"
-                    try: link = card.find_element(By.CSS_SELECTOR, "a").get_attribute("href")
-                    except: link = "N/A"
+                    try:
+                        date_text = card.find_element(By.CSS_SELECTOR, "span.date").text
+                    except:
+                        date_text = "Today"
+                    try:
+                        link = card.find_element(By.CSS_SELECTOR, "a").get_attribute("href")
+                    except:
+                        link = "N/A"
 
-    
                     salary = "Not Disclosed"
                     try:
                         meta_items = card.find_elements(By.CSS_SELECTOR, ".metadata")
@@ -84,25 +114,30 @@ class SeleniumScraper:
                             if "₹" in txt or "a year" in txt:
                                 salary = txt
                                 break
-                    except: pass
+                    except:
+                        pass
 
                     jobs.append({
-                        "title": title, "company": company, "location": loc,
-                        "salary": salary, "experience": "N/A",
-                        "description": title, "job_url": link, "site": "Indeed",
+                        "title": title,
+                        "company": company,
+                        "location": loc,
+                        "salary": salary,
+                        "experience": "N/A",
+                        "description": title,
+                        "job_url": link,
+                        "site": "Indeed",
                         "date_posted": parse_relative_date(date_text)
                     })
-                except: continue
+                except:
+                    continue
         finally:
             driver.quit()
         return jobs
 
     def scrape_naukri(self, keyword, location, limit=10):
-        print(f"[Naukri] Scraping '{keyword}'...")
         driver = self.get_driver(headless=False)
         jobs = []
         try:
-
             driver.get(f"https://www.naukri.com/{keyword.replace(' ', '-')}-jobs")
             time.sleep(random.uniform(5, 8))
             
@@ -115,32 +150,104 @@ class SeleniumScraper:
                     
                     try:
                         exp = card.find_element(By.CSS_SELECTOR, ".expwdth").text
-                    except: exp = "N/A"
+                    except:
+                        exp = "N/A"
                     
                     try:
                         sal = card.find_element(By.CSS_SELECTOR, ".sal-wrap").text
-                    except: sal = "Not Disclosed"
+                    except:
+                        sal = "Not Disclosed"
 
-                    try: date_text = card.find_element(By.CSS_SELECTOR, ".job-post-day").text
-                    except: date_text = "Today"
+                    try:
+                        date_text = card.find_element(By.CSS_SELECTOR, ".job-post-day").text
+                    except:
+                        date_text = "Today"
                     
-                    try: link = card.find_element(By.CSS_SELECTOR, ".title").get_attribute("href")
-                    except: link = "N/A"
+                    try:
+                        link = card.find_element(By.CSS_SELECTOR, ".title").get_attribute("href")
+                    except:
+                        link = "N/A"
 
                     jobs.append({
-                        "title": title, "company": company, "location": loc,
-                        "salary": sal, "experience": exp,
-                        "description": title, "job_url": link, "site": "Naukri",
+                        "title": title,
+                        "company": company,
+                        "location": loc,
+                        "salary": sal,
+                        "experience": exp,
+                        "description": title,
+                        "job_url": link,
+                        "site": "Naukri",
                         "date_posted": parse_relative_date(date_text)
                     })
-                except: continue
+                except:
+                    continue
         finally:
             driver.quit()
         return jobs
+        
+    def scrape_jobkaka(self, limit=30, query=None):
+        driver = self.get_driver(headless=True)
+        all_jobs = []
+        current_page = 1
+
+        try:
+            while len(all_jobs) < limit:
+                if query:
+                    url = f"https://www.jobkaka.com/page/{current_page}/?s={query}"
+                else:
+                    url = f"https://www.jobkaka.com/page/{current_page}/"
+                
+                driver.get(url)
+                time.sleep(2)
+
+                jobs = driver.find_elements(By.CSS_SELECTOR, "a.content_link")
+                if not jobs:
+                    break
+
+                for job in jobs:
+                    if len(all_jobs) >= limit:
+                        break
+
+                    try:
+                        title = job.find_element(By.CSS_SELECTOR, ".entry-title").text.strip()
+
+                        details = job.find_elements(By.CSS_SELECTOR, ".entry-job-date-details")
+                        updated_on = details[0].text.strip() if len(details) > 0 else ""
+                        job_type = details[1].text.strip() if len(details) > 1 else ""
+                        qualification = details[2].text.strip() if len(details) > 2 else ""
+                        salary = details[3].text.strip() if len(details) > 3 else ""
+                        link = job.get_attribute("href")
+                        
+                        state = clean_location(title)
+                        if query and state == "Unknown":
+                            state = query.capitalize()
+
+                        all_jobs.append({
+                            "title": title,
+                            "company": job_type,
+                            "location": state,
+                            "salary": salary,
+                            "experience": qualification,
+                            "description": title,
+                            "job_url": link,
+                            "site": "JobKaka",
+                            "date_posted": updated_on
+                        })
+
+                    except Exception as e:
+                        print("Error parsing job:", e)
+
+                current_page += 1
+                time.sleep(1)
+
+        finally:
+            driver.quit()
+
+        return all_jobs
+
 
 class LinkedInScraper:
     async def scrape(self, keyword, location="India", limit=10, time_filter="Any Time", work_type="Any", exp_level="Any"):
-        print(f"[LinkedIn] Scraping '{keyword}'...")
         data = []
         t_param = LINKEDIN_FILTERS["time"].get(time_filter, "")
         w_param = LINKEDIN_FILTERS["type"].get(work_type, "")
@@ -163,8 +270,7 @@ class LinkedInScraper:
                     loc_el = await card.query_selector(".job-search-card__location")
                     link_el = await card.query_selector(".base-card__full-link")
                     
-
-                    sal = "Not Disclosed" 
+                    sal = "Not Disclosed"
                     
                     date_text = "Today"
                     date_el = await card.query_selector("time")
@@ -176,14 +282,21 @@ class LinkedInScraper:
                     company = await company_el.inner_text() if company_el else "N/A"
                     loc = await loc_el.inner_text() if loc_el else "N/A"
                     link = await link_el.get_attribute("href") if link_el else "#"
-                    if "?" in link: link = link.split("?")[0]
+                    if "?" in link:
+                        link = link.split("?")[0]
 
                     data.append({
-                        "title": title.strip(), "company": company.strip(), "location": loc.strip(),
-                        "salary": sal, "experience": "N/A",
-                        "description": title, "job_url": link, "site": "LinkedIn",
+                        "title": title.strip(),
+                        "company": company.strip(),
+                        "location": loc.strip(),
+                        "salary": sal,
+                        "experience": "N/A",
+                        "description": title,
+                        "job_url": link,
+                        "site": "LinkedIn",
                         "date_posted": parse_relative_date(date_text.strip())
                     })
-                except: continue
+                except:
+                    continue
             await browser.close()
         return data
