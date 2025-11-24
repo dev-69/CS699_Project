@@ -210,7 +210,7 @@ async def run_hybrid_scrape(keyword, location, limit, time_filter, work_type, ex
             try:
                 answer = sel_scraper.scrape_indeed(keyword, limit, time_filter)
                 jobs.extend(answer)
-                counts["Indeed"] = length(answer)
+                counts["Indeed"] = len(answer)
                 for step in answer:
                     insert_job(conn, step)
                     save_to_csv(step)
@@ -223,7 +223,7 @@ async def run_hybrid_scrape(keyword, location, limit, time_filter, work_type, ex
             try:
                 answer = sel_scraper.scrape_naukri(keyword, location, limit)
                 jobs.extend(answer)
-                counts["Naukri"] = length(answer)
+                counts["Naukri"] = len(answer)
                 for step in answer:
                     insert_job(conn, step)
                     save_to_csv(step)
@@ -237,7 +237,7 @@ async def run_hybrid_scrape(keyword, location, limit, time_filter, work_type, ex
         try:
             answer = await lnk_scraper.scrape(keyword, location, limit, time_filter, work_type, exp_level)
             jobs.extend(answer)
-            counts["LinkedIn"] = length(answer)
+            counts["LinkedIn"] = len(answer)
             for step in answer:
                 insert_job(conn, step)
                 save_to_csv(step)
