@@ -23,7 +23,7 @@ if 'scrape_counts' not in st.session_state:
 px.defaults.template = "plotly_dark"
 px.defaults.color_discrete_sequence = px.colors.qualitative.Set2
 
-from src.database import init_db, insert_job, load_all_jobs, save_to_csv, load_all_jobs_csv
+from src.database import init_db, insert_job, load_all_jobs, save_to_csv
 from src.scraper import SeleniumScraper, LinkedInScraper
 from src.analytics_engine import extract_skills, clean_location
 from src.recommender import get_recommendations
@@ -199,21 +199,21 @@ async def run_hybrid_scrape(keyword, location, limit, time_filter, work_type, ex
     status_text = st.empty()
     progress_bar = st.progress(0)
     conn = init_db()
-    
+
     counts = {"Indeed": 0, "Naukri": 0, "LinkedIn": 0}
-    
+
     if use_indeed or use_naukri:
         sel_scraper = SeleniumScraper()
-        
+
         if use_indeed:
             status_text.text("Running Indeed Scraper...")
             try:
-                res = sel_scraper.scrape_indeed(keyword, limit, time_filter) 
-                jobs.extend(res)
-                counts["Indeed"] = len(res)
-                for j in res:
-                    insert_job(conn, j)
-                    save_to_csv(j)
+                answer = sel_scraper.scrape_indeed(keyword, limit, time_filter)
+                jobs.extend(answer)
+                counts["Indeed"] = length(answer)
+                for step in answer:
+                    insert_job(conn, step)
+                    save_to_csv(step)
             except Exception as e:
                 print("[Indeed Scraper Error]", e)
             progress_bar.progress(33)
@@ -221,12 +221,12 @@ async def run_hybrid_scrape(keyword, location, limit, time_filter, work_type, ex
         if use_naukri:
             status_text.text("Running Naukri Scraper...")
             try:
-                res = sel_scraper.scrape_naukri(keyword, location, limit)
-                jobs.extend(res)
-                counts["Naukri"] = len(res)
-                for j in res:
-                    insert_job(conn, j)
-                    save_to_csv(j)
+                answer = sel_scraper.scrape_naukri(keyword, location, limit)
+                jobs.extend(answer)
+                counts["Naukri"] = length(answer)
+                for step in answer:
+                    insert_job(conn, step)
+                    save_to_csv(step)
             except Exception as e:
                 print("[Naukri Scraper Error]", e)
             progress_bar.progress(66)
@@ -235,12 +235,12 @@ async def run_hybrid_scrape(keyword, location, limit, time_filter, work_type, ex
         status_text.text("Running LinkedIn Scraper...")
         lnk_scraper = LinkedInScraper()
         try:
-            res = await lnk_scraper.scrape(keyword, location, limit, time_filter, work_type, exp_level)
-            jobs.extend(res)
-            counts["LinkedIn"] = len(res)
-            for j in res:
-                insert_job(conn, j)
-                save_to_csv(j)
+            answer = await lnk_scraper.scrape(keyword, location, limit, time_filter, work_type, exp_level)
+            jobs.extend(answer)
+            counts["LinkedIn"] = length(answer)
+            for step in answer:
+                insert_job(conn, step)
+                save_to_csv(step)
         except Exception as e:
             print("[LinkedIn Scraper Error]", e)
         progress_bar.progress(90)
@@ -248,9 +248,8 @@ async def run_hybrid_scrape(keyword, location, limit, time_filter, work_type, ex
     conn.close()
     progress_bar.progress(100)
     status_text.empty()
-    
-    return pd.DataFrame(jobs), counts
 
+    return pd.DataFrame(jobs), counts
 
 def show_results_page():
     df = st.session_state.scraped_data
