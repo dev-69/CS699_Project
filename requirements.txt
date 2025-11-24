@@ -3,3 +3,9 @@ pandas
 playwright
 plotly
 nest_asyncio
+selenium
+youtube-search
+spacy
+beautifulsoup4
+ddgs
+undetected-chromedriver
