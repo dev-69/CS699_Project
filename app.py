@@ -137,7 +137,7 @@ def render_resource_card(item, type_label):
             "https://images.unsplash.com/photo-1501504905252-473c47e087f8"
             "?w=500&auto=format&fit=crop&q=60"
         )
-        
+
     return f"""
     <div class="resource-card">
         <div>
@@ -325,15 +325,37 @@ def show_private_results_page(keyword):
 
         with c2:
             st.subheader("Location Spread")
-            df["Clean_Loc"] = df["Location"].apply(clean_location)
-            fig_loc = px.pie(
-                df,
-                names="Clean_Loc",
-                hole=0.4,
-                title="Jobs by Location",
-            )
-            fig_loc.update_layout(margin=dict(l=10, r=10, t=40, b=10))
-            st.plotly_chart(fig_loc, use_container_width=True)
+            df_hist["Exp_Clean"] = df_hist["Experience"].apply(bucket_exp)
+            df_exp = df_hist[df_hist["Exp_Clean"] != "Unknown"]
+
+            if df_exp.empty:
+                st.info("No valid experience data available.")
+
+            else:
+                bucket_order = ["0-1 years", "1-3 years", "3-5 years", "5-10 years", "10+ years"]
+
+                exp_counts = (
+                    df_exp["Exp_Clean"]
+                    .value_counts()
+                  .reindex(bucket_order, fill_value=0)
+                   .reset_index()
+                )
+
+                exp_counts.columns = ["Experience", "Count"]
+
+                fig = px.bar(
+                    exp_counts,
+                    x="Experience",
+                    y="Count",
+                    title="Experience Levels (Historical)",
+                )
+
+                fig.update_layout(
+                    xaxis={'categoryorder':'array', 'categoryarray': bucket_order},
+                    margin=dict(l=10, r=10, t=40, b=10)
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
 
     with tab2:
         st.subheader("Scraped Job Listings")

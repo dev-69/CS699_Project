@@ -11,10 +11,61 @@ import undetected_chromedriver as uc
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 
+def bucket_exp(x):
+    x = x.lower().strip()
+
+    if x in ["n/a", "", "not disclosed", "unknown"]:
+        return "Unknown"
+
+    if "fresher" in x:
+        return "0-1 years"
+
+    nums = re.findall(r'\d+', x)
+
+    if len(nums) == 0:
+        return "Unknown"
+
+    nums = [int(n) for n in nums]
+    low = nums[0]
+    high = nums[1] if len(nums) > 1 else nums[0]
+
+    if high <= 1:
+        return "0-1 years"
+    elif high <= 3:
+        return "1-3 years"
+    elif high <= 5:
+        return "3-5 years"
+    elif high <= 10:
+        return "5-10 years"
+    else:
+        return "10+ years"
+
+def normalize_private_exp(x):
+
+    x = x.lower().strip()
+
+    if x in ["n/a", "", "not disclosed"]:
+        return "Unknown"
+
+    if "fresher" in x:
+        return "0 years"
+
+    nums = re.findall(r'\d+', x)
+
+    if len(nums) == 0:
+        return "Unknown"
+
+    elif len(nums) == 1:
+        return f"{nums[0]} years"
+    
+    else:
+        return f"{nums[0]}-{nums[1]} years"
+
 
 def parse_relative_date(text):
     if not text:
         return datetime.now().strftime("%Y-%m-%d")
+    
     text = text.lower()
     today = datetime.now()
 
@@ -22,16 +73,20 @@ def parse_relative_date(text):
         return today.strftime("%Y-%m-%d")
 
     match = re.search(r"(\d+)", text)
+
     if not match:
         return today.strftime("%Y-%m-%d")
     num = int(match.group(1))
 
     if "day" in text or "d" in text:
         date_obj = today - timedelta(days=num)
+
     elif "week" in text or "w" in text:
         date_obj = today - timedelta(weeks=num)
+
     elif "month" in text or "m" in text:
         date_obj = today - timedelta(days=num * 30)
+
     else:
         date_obj = today
 
@@ -94,9 +149,12 @@ class SeleniumScraper:
                     browser_executable_path=browser_path,
                     use_subprocess=True,
                 )
+
             else:
                 driver = uc.Chrome(options=options, use_subprocess=True)
+
             return driver
+        
         except Exception as e:
             print(f"Error creating driver: {e}")
             raise
@@ -122,6 +180,7 @@ class SeleniumScraper:
                             (By.CSS_SELECTOR, "div.job_seen_beacon")
                         )
                     )
+
                 except Exception as e:
                     print(f"[Indeed] Error loading page: {e}")
                     break
@@ -129,6 +188,7 @@ class SeleniumScraper:
                 cards = self.driver.find_elements(
                     By.CSS_SELECTOR, "div.job_seen_beacon"
                 )
+
                 if not cards:
                     print("[Indeed] No job cards found")
                     break
@@ -141,9 +201,11 @@ class SeleniumScraper:
 
                     try:
                         title = card.find_element(By.CSS_SELECTOR, "h2 span").text
+
                         company = card.find_element(
                             By.CSS_SELECTOR, "span[data-testid='company-name']"
                         ).text
+
                         loc = card.find_element(
                             By.CSS_SELECTOR, "div[data-testid='text-location']"
                         ).text
@@ -153,11 +215,13 @@ class SeleniumScraper:
                             meta_items = card.find_elements(
                                 By.CSS_SELECTOR, ".metadata"
                             )
+
                             for m in meta_items:
                                 txt = m.text
                                 if "₹" in txt or "year" in txt or "month" in txt:
                                     salary = txt
                                     break
+
                         except:
                             pass
 
@@ -165,6 +229,7 @@ class SeleniumScraper:
                             date_text = card.find_element(
                                 By.CSS_SELECTOR, "span.date"
                             ).text
+
                         except:
                             date_text = "Today"
 
@@ -172,6 +237,7 @@ class SeleniumScraper:
                             link = card.find_element(
                                 By.CSS_SELECTOR, "a"
                             ).get_attribute("href")
+
                         except:
                             link = "#"
 
@@ -182,7 +248,7 @@ class SeleniumScraper:
                                 "location": loc,
                                 "salary": salary,
                                 "experience": "N/A",
-                                "description": title,
+                                "description": f"{title} {company} {loc}",
                                 "job_url": link,
                                 "site": "Indeed",
                                 "date_posted": parse_relative_date(date_text),
@@ -234,6 +300,7 @@ class SeleniumScraper:
                             (By.CSS_SELECTOR, ".srp-jobtuple-wrapper")
                         )
                     )
+
                 except Exception as e:
                     print(f"[Naukri] Error loading page: {e}")
                     break
@@ -241,6 +308,7 @@ class SeleniumScraper:
                 cards = self.driver.find_elements(
                     By.CSS_SELECTOR, ".srp-jobtuple-wrapper"
                 )
+
                 if not cards:
                     print("[Naukri] No job cards found")
                     break
@@ -255,9 +323,11 @@ class SeleniumScraper:
                         title = card.find_element(
                             By.CSS_SELECTOR, ".title"
                         ).text
+
                         company = card.find_element(
                             By.CSS_SELECTOR, ".comp-name"
                         ).text
+
                         loc = card.find_element(
                             By.CSS_SELECTOR, ".locWdth"
                         ).text
@@ -266,29 +336,37 @@ class SeleniumScraper:
                             exp = card.find_element(
                                 By.CSS_SELECTOR, ".expwdth"
                             ).text
+
                         except:
                             exp = "N/A"
+
 
                         try:
                             sal = card.find_element(
                                 By.CSS_SELECTOR, ".sal-wrap"
                             ).text
+
                         except:
                             sal = "Not Disclosed"
+
 
                         try:
                             date_text = card.find_element(
                                 By.CSS_SELECTOR, ".job-post-day"
                             ).text
+
                         except:
                             date_text = "Today"
+
 
                         try:
                             link = card.find_element(
                                 By.CSS_SELECTOR, ".title"
                             ).get_attribute("href")
+
                         except:
                             link = "#"
+
 
                         jobs.append(
                             {
@@ -297,7 +375,7 @@ class SeleniumScraper:
                                 "location": loc,
                                 "salary": sal,
                                 "experience": exp,
-                                "description": title,
+                                "description": f"{title} {company} {loc}",
                                 "job_url": link,
                                 "site": "Naukri",
                                 "date_posted": parse_relative_date(date_text),
@@ -321,6 +399,7 @@ class SeleniumScraper:
         finally:
             try:
                 self.driver.quit()
+
             except:
                 pass
 
@@ -330,6 +409,7 @@ class SeleniumScraper:
     def scrape_jobkaka(self, limit=30, query=None):
         if query:
             print(f"[JobKaka] Searching for '{query}' (Limit: {limit})")
+
         else:
             print(f"[JobKaka] Scraping Latest Jobs (Limit: {limit})")
 
@@ -344,6 +424,7 @@ class SeleniumScraper:
                     url = (
                         f"https://www.jobkaka.com/page/{current_page}/?s={query}"
                     )
+
                 else:
                     url = f"https://www.jobkaka.com/page/{current_page}/"
 
@@ -357,6 +438,7 @@ class SeleniumScraper:
                             (By.CSS_SELECTOR, "a.content_link")
                         )
                     )
+
                 except Exception as e:
                     print(f"[JobKaka] Error loading page: {e}")
                     break
@@ -364,6 +446,7 @@ class SeleniumScraper:
                 job_cards = self.driver.find_elements(
                     By.CSS_SELECTOR, "a.content_link"
                 )
+
                 if not job_cards:
                     print("[JobKaka] No more jobs found")
                     break
@@ -380,6 +463,7 @@ class SeleniumScraper:
                         title = job.find_element(
                             By.CSS_SELECTOR, ".entry-title"
                         ).text.strip()
+
                         details = job.find_elements(
                             By.CSS_SELECTOR, ".entry-job-date-details"
                         )
@@ -387,17 +471,21 @@ class SeleniumScraper:
                         updated_on = (
                             details[0].text.strip() if len(details) > 0 else "N/A"
                         )
+
                         job_type = (
                             details[1].text.strip() if len(details) > 1 else "N/A"
                         )
+
                         qualification = (
                             details[2].text.strip() if len(details) > 2 else "N/A"
                         )
+
                         salary = (
                             details[3].text.strip()
                             if len(details) > 3
                             else "Not Disclosed"
                         )
+
                         link = job.get_attribute("href")
 
                         from src.analytics_engine import clean_location
@@ -492,12 +580,15 @@ class LinkedInScraper:
                         title_el = await card.query_selector(
                             ".base-search-card__title"
                         )
+
                         company_el = await card.query_selector(
                             ".base-search-card__subtitle"
                         )
+
                         loc_el = await card.query_selector(
                             ".job-search-card__location"
                         )
+
                         link_el = await card.query_selector(
                             ".base-card__full-link"
                         )
@@ -513,14 +604,17 @@ class LinkedInScraper:
                         title = (
                             await title_el.inner_text() if title_el else "N/A"
                         )
+
                         company = (
                             await company_el.inner_text()
                             if company_el
                             else "N/A"
                         )
+
                         loc = (
                             await loc_el.inner_text() if loc_el else "N/A"
                         )
+
                         link = (
                             await link_el.get_attribute("href")
                             if link_el
